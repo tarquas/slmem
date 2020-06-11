@@ -1,0 +1,137 @@
+
+--- THE POWER OF BINARY WALK ---
+
+(c) 2013. Taras Mykhailovych <tarquas@gmail.com>, Prywit Research Labs <info@prywit.com>.
+
+
+Introduction
+============
+
+Binary Tree ("BT") is a powerful data structure, which can provide automatic ordering of a collection of binary series ("BTK" -- Binary Tree Key collection). The addition and search operations on a binary tree have complexity O(log_2 n), where 'n' is the current number of items. Each BTK can represent a Value, thus the Binary Tree can be treated as a dictionary of Key:Value pairs with binary ordered Keys.
+
+For instance, the two byte-aligned BTKs: #1 "01000101 01101001" and #2 "01011011 11011011" are written into a tree like:
+
+           ..0: 0101 01101001   -- Zero-branch #1
+  Root: 010
+           ''1: 1011 11011011   -- Unit-branch #2
+
+which got a value "010" on Binary Tree Root and a Binary Tree Leafage after 3rd bit. Its Zero-branch goes up and has value "0101 01101001", and Unit-branch goes down and has value of "1011 11011011".
+
+If we add two more items to a tree above with BTKs: #3 "01000111" and #4 "01011011 11011010", the tree will look like:
+
+	          ..0: 1 01101001  #1
+	   ..0: 01..1: 1           #3
+	010                 ..0:   #4
+	   ''1: 1011 1101101
+	                    ''1:   #2
+
+The Leafage:
+
+	          / Zero-branch
+	Parent --<
+	          \ Unit-branch
+
+Binary walk -- is an operation of finding the subsequent previous and next items, that are relative to current one, and thus getting lists of items, ordered by binary value in either ascending or descending order.
+
+Binary step back - is an operation of finding predecessor of a BTK. It can be performed walking up the parent Leafages of our BTK until the branch of current iteration is a Unit-branch on the corresponding Leafage. In such a case, we follow one Zero-branch of that Leafage and then all the Unit-branches of subsequent Leafages (if such exist) till the end of BTK. The BTK retrieved with such an operation will be previous in binary order to our source BTK, used initially for the operation. If walking up on parent Leafages, we reached the Root of BT and the initial Root branch of our BTK is not a Unit-branch of a Root, the BTK is the first in binary order of BT and has no predecessor.
+
+Binary step forward - is an operation of finding successor of a BTK. It can be performed walking up the parent Leafages of our BTK until the branch of current iteration is a Zero-branch on the corresponding Leafage. In such a case, we follow one Unit-branch of that Leafage and then all the Zero-branches of subsequent Leafages (if such exist) till the end of BTK. The BTK retrieved with such an operation will be next in binary order to our source BTK. If walking up on parent Leafages, we reached the Root of BT and the initial Root branch of our BTK is not a Zero-branch of a Root, the BTK is the last in binary order of BT and has no successor.
+
+
+1. Binary Walk Transitive Types
+===============================
+
+Binary Walk Transitive Type (BW-type) -- is a fundamental data type  (text; integer or real number), which instance is represented with an ordered binary series to support the following features:
+
+1) Binary walk transitivity
+2) Byte-aligned bit count
+3) Unlimited resolution of rational numbers and length of text string
+4) Affine infinity representation for real numbers
+
+
+Fundamental BW-types
+
+1.1. bwQty BW-type
+
+"bwQty" -- BW-type for a quantity (an unsigned integer). The binary series, representing some number, is called bwQty instance and is built using the following rules:
+
+1.1.1. The group of the MSBs (called "bwQty Header"), which is zero-bit-terminated on right a sequence of unit-bits; count of these unit-bits identifies how many additional bytes are involved into BW-type instance. If MSB is zero, no additional bytes involved.
+
+1.1.2. The rest of the bits of a first byte together with additional bytes represent a binary series (called "bwQty Data"), identifying a number in binary big-endian format.
+
+1.1.2.1. The Data, representing a zero number, contains 7 zero-bits.
+
+1.1.2.2. The Data, representing any number other than zero, must not start with 7 zero-bit MSBs, as in this case the number can be represented with lesser number of bytes.
+
+Examples:
+
+1) If the first byte is "110 10100" (0xb4), it means that bwQty instance needs two more subsequent bytes (as the Header is "110" and it has got two unit-bits). So, bwQty instance of three bytes: "110 10100", "11001100", "11110101" (0xb4, 0xcc, 0xf5) represents unsigned integer of "10100 11001100 11110101" (0x14ccf5).
+
+2) bwQty instance of two bytes "10 000000", "00101011" (which could represent number 0x2b according to rules 1.1.1 and 1.1.2) is invalid, as it violates rule 1.1.2.2: after a Header "10" there are 7 MSBs of Data: "000000 0". To fix such a problem, we can remove 7 zero-MSBs from Data along with one unit-bit of Header. Thus, we get only one byte: "0 0101011" (Header "0" and Data "0101011"), representing exactly what we needed: 0x2b.
+
+3) bwQty Header of "11111111 110" means that 5 LSBs of second byte along with all the bits of 10 additional bytes are taken to represent the Data of such bwQty instance.
+
+Why it's binary walk transitive?
+
+The wider Header represents the greater number -- last zero-bit of thiner Header will precede a concurrent unit-bit of wider Header in binary walk. If the two BW-type instances have got equal Headers, their Data always has the same count of bits and their representation as a pair of ordinal big-endian unsigned integers, in such a case is self-explanatory binary walk transitive.
+
+
+1.2. bwInt BW-type
+
+"bwInt" -- BW-type, which represents a signed integer. MSB is "bwInt Header", consists of single sign bit, which is "0" for negative and "1" for positive numbers. The next bits are "bwInt Data". For positive numbers the Data bits are of bwQty type. For negative numbers, the Data is inverted bwQty instance of decreased by one absolute value of the number being represented.
+
+Examples:
+
+1. "1 0000000" (0x80) represents 0.
+2. "1 0000001" (0x81) represents 1.
+3. "1 1000000", "10000000" (0xc0, 0x80) represents 0x80 (128).
+4. "0 1111111" (0x7f) represents -1.
+5. "0 0111111", "10000000" (0x3f, 0x80) represents -0x80 (-128).
+6. "0 0111111", "01111111" (0x3f, 0x7f) represents -0x81 (-129).
+
+
+1.3. bwPeriod BW-type.
+
+"bwPeriod" -- a BW-type, which represents a period of a periodic fraction of a number. The "bwPeriod Data" is a binary big-endian mantissa format, subdivided into bytes. LSB of each byte ("bwPeriod Leafage") shows whether the next byte should be taken. If its value is unit-bit ("1"), the Data continues in next such a byte.
+
+1.3.1. If the Leafage is zero-bit ("0"), there are no more bytes needed to represent bwPeriod Data. In such a case, the next LSBs after the Leafage are the "bwPeriod Sealant" -- it is a sequence of unit-bits, terminated by a zero-bit, which identifies the count of bits in a period. The Sealant must be fit into only the last byte of bwPeriod.
+
+1.3.2. If the period can be represented by a fewer bits of Data, it must be used.
+
+Examples:
+
+1) "10 01111 0" (0x9e) represents a binary period "10" (which is identical to binary period "01"; f.x. in fraction like ".01010101..." or ".111101010101...").
+
+2) "0010100 1  0110 011 0" (0x29, 0x66) represents a binary period "001010010110".
+
+3) "101110 0 0" (0xb8) represents a binary period "101110".
+
+
+
+
+1.4. bwMant BW-type
+
+"bwMant" -- BW-type, which represents a mantissa of a positive floating point number in scientific format. The "bwMant Data" is in binary big-endian representation, subdivided into bytes.
+The MSB of first byte is a bit of integer part of mantissa, the rest of bits (excluding LSBs of data bytes) represent the fractional part.
+LSB of each byte ("bwMant Leafage") shows whether the next byte should be taken. If its value is "1", the Data continues in next such a byte.
+If the Leafage is "0", there are no more bytes needed to represent bwMant Data. In such a case, the next LSB after the Leafage is "bwMant Periodic", which indicates whether the fraction is periodic. It's value of "0" terminates the bwMant instance. In case of Periodic bit set ("1"), the subsequent byte(s) are "bwMant Period", which is of "bwPeriod" type. It must continue the Data bits, to repeat the period exactly once and then get sealed.
+A value of zero should be represented as "000000 0 0". Any other mantissa value than zero, obviously, has MSB set.
+
+
+Examples:
+
+1. "000000 0 0" (0x00) represents a zero.
+2. "100000 0 0", "000000 0 0" (0x80, 0x00) represents "1"(binary).
+3. "101010 0 0" (0xa8) represents "1.0101".
+4. "101010 1 0", "01 11111 0" (0xaa, 0x7e) represents "1.0101010101010101010... (10 in period)".
+
+
+1.5. bwFloat BW-type.
+
+"bwFloat" -- BW-type, which represents a real (floating-point) number.
+The MSB of first byte is a sign bit, which meaning is identical to such from bwInt type (see above). If sign bit is zero, all the other bits of first byte and all the bits of other bytes get inverted.
+After a sign bit -- in the same byte -- there is 7-bit (but continuable with more bytes if needed) bwInt, representing an exponent of scientific number representation and is named "bwFloat Exp"; it also may involve additional bytes.
+After that -- a "bwMant" type, representing a mantissa.
+
+
+NOTE! Real numbers with periodic fraction are not binary walk transitive -- this is experimental feature and its idea to be properly developed.
